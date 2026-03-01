@@ -7,13 +7,17 @@ This repository contains structured notes and hands-on resources to understand *
 
 ##  Table of Contents
 
-* [Concepts](#-concepts)
+* [Concepts](#concepts)
 
   * [Introduction](./Concepts/introduction.md)
   * [How Docker Works?](./Concepts/howdockerworks.md)
   * [Installation Guide](./Concepts/installations.md)
 
-* [ Hands-on Practice](#-hands-on-practice)
+* [ Hands-on Practice](#hands-on-practice)
+
+  * [Docker Commands](./hands-on/dockercommands.md)
+
+* [ Goal ](#goal-of-this-repository)
 
 * [ License](LICENSE)
 
@@ -32,14 +36,13 @@ This section covers all the **theoretical foundations** of Docker:
 
 ##  Hands-on Practice
 
-This section will include:
+This section  includes:
 
 * Docker commands practice
 * Container creation and management
 * Image building
 * Real-world DevOps scenarios
 
-*(Content will be added progressively)*
 
 ---
 
