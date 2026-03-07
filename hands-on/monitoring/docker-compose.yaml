@@ -1,0 +1,11 @@
+services:
+  docker-monitor:
+    build: .
+    ports:
+      - "8000:8000"
+    volumes:
+      # Mount Docker socket so the app can talk to Docker daemon
+      - /var/run/docker.sock:/var/run/docker.sock:ro
+    restart: unless-stopped
+    environment:
+      - PYTHONUNBUFFERED=1

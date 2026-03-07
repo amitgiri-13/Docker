@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Docker Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<!-- Modern & minimal font setup -->
+<link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;600;700&family=Fira+Code:wght@400;700&display=swap" rel="stylesheet">
+<link rel="stylesheet" href="/static/style.css">
+</head>
+<body>
+
+<header>
+  <div class="logo">
+    <div class="logo-icon">
+      <svg viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg"><path d="M13 10H17V6H13V10ZM7 10H11V6H7V10ZM13 16H17V12H13V16ZM7 16H11V12H7V16ZM3 21V3H21V21H3Z"/></svg>
+    </div>
+    <div class="logo-text">DOCKER<span>MONITOR</span></div>
+  </div>
+  <div class="header-right">
+    <div class="status-badge">
+      <div class="status-dot" id="dockerDot"></div>
+      <span id="dockerStatus">connecting...</span>
+    </div>
+    <span id="timestamp">—</span>
+    <button class="refresh-btn" onclick="fetchStats()">⟳ REFRESH</button>
+  </div>
+</header>
+
+<div class="container" id="app">
+  <div class="loading"><div class="spinner"></div> loading metrics...</div>
+</div>
+
+<script>
+let autoRefresh = setInterval(fetchStats, 5000);
+
+async function fetchStats() {
+  try {
+    const res = await fetch('/api/stats');
+    const d = await res.json();
+    render(d);
+  } catch(e) {
+    console.error(e);
+  }
+}
+
+function pct(v) {
+  const cls = v >= 90 ? 'danger' : v >= 70 ? 'warn' : '';
+  return `<div class="progress-track"><div class="progress-fill ${cls}" style="width:${v}%"></div></div>`;
+}
+
+function miniBar(v) {
+  const cls = v >= 90 ? 'danger' : v >= 70 ? 'warn' : '';
+  return `<div class="mini-bar">
+    <div class="mini-bar-track"><div class="mini-bar-fill ${cls}" style="width:${Math.min(v,100)}%"></div></div>
+    <span>${v}%</span>
+  </div>`;
+}
+
+function statusTag(s) {
+  return `<span class="tag ${s}">${s}</span>`;
+}
+
+function render(d) {
+  const h = d.host;
+  document.getElementById('timestamp').textContent = d.timestamp;
+  const dot = document.getElementById('dockerDot');
+  const dockerStatusEl = document.getElementById('dockerStatus');
+
+  if (d.docker_connected) {
+    dot.className = 'status-dot';
+    dockerStatusEl.textContent = `docker v${d.docker_info.version || '?'}`;
+  } else {
+    dot.className = 'status-dot offline';
+    dockerStatusEl.textContent = 'docker offline';
+  }
+
+  let html = '';
+
+  // HOST METRICS
+  html += `<div class="section-label">HOST METRICS</div>`;
+  html += `<div class="grid-4">`;
+
+  html += `<div class="card">
+    <div class="card-label">CPU USAGE</div>
+    <div class="card-value">${h.cpu_percent}<span style="font-size:16px;color:var(--muted)">%</span></div>
+    <div class="card-sub">${h.cpu_count} cores · ${h.cpu_freq_mhz} MHz</div>
+    <div class="progress-wrap">
+      <div class="progress-label"><span>usage</span><span>${h.cpu_percent}%</span></div>
+      ${pct(h.cpu_percent)}
+    </div>
+  </div>`;
+
+  html += `<div class="card">
+    <div class="card-label">MEMORY</div>
+    <div class="card-value">${h.mem_percent}<span style="font-size:16px;color:var(--muted)">%</span></div>
+    <div class="card-sub">${h.mem_used} / ${h.mem_total}</div>
+    <div class="progress-wrap">
+      <div class="progress-label"><span>used</span><span>${h.mem_available} free</span></div>
+      ${pct(h.mem_percent)}
+    </div>
+  </div>`;
+
+  html += `<div class="card">
+    <div class="card-label">SWAP</div>
+    <div class="card-value">${h.swap_percent}<span style="font-size:16px;color:var(--muted)">%</span></div>
+    <div class="card-sub">${h.swap_used} / ${h.swap_total}</div>
+    <div class="progress-wrap">
+      <div class="progress-label"><span>swap used</span><span>${h.swap_percent}%</span></div>
+      ${pct(h.swap_percent)}
+    </div>
+  </div>`;
+
+  html += `<div class="card">
+    <div class="card-label">SYSTEM</div>
+    <div class="card-value" style="font-size:18px;padding-top:4px;color:var(--accent2)">${h.uptime}</div>
+    <div class="card-sub">uptime</div>
+    <div class="card-sub" style="margin-top:8px">Load avg: ${h.load_avg.join(' · ')}</div>
+  </div>`;
+
+  html += `</div>`;
+
+  // CPU per core
+  if (h.cpu_per_core && h.cpu_per_core.length > 1) {
+    html += `<div class="section-label">CPU CORES</div>`;
+    html += `<div class="card"><div class="cores-grid">`;
+    h.cpu_per_core.forEach((v, i) => {
+      const fillCls = v >= 90 ? 'danger' : v >= 70 ? 'warn' : '';
+      html += `<div class="core-cell">
+        <div class="core-bar"><div class="core-fill" style="height:${v}%;background:${v>=90?'var(--red)':v>=70?'var(--warn)':'var(--accent2)'}"></div></div>
+        <div class="core-label">C${i}<br>${v}%</div>
+      </div>`;
+    });
+    html += `</div></div>`;
+  }
+
+  // DOCKER
+  html += `<div class="section-label">DOCKER ENGINE</div>`;
+
+  if (!d.docker_connected) {
+    html += `<div class="offline-notice">⚠ Cannot connect to Docker daemon. Make sure the Docker socket is mounted: <code>-v /var/run/docker.sock:/var/run/docker.sock</code></div>`;
+  } else {
+    const di = d.docker_info;
+    html += `<div class="info-grid">`;
+    const fields = [
+      ['Server', di.server_version],
+      ['OS', di.os],
+      ['Kernel', di.kernel],
+      ['Arch', di.arch],
+      ['CPUs', di.cpus],
+      ['Memory', di.memory],
+      ['Storage Driver', di.driver],
+      ['Total Containers', di.containers_total],
+      ['Running', `<span style="color:var(--green)">${di.containers_running}</span>`],
+      ['Paused', `<span style="color:var(--yellow)">${di.containers_paused}</span>`],
+      ['Stopped', `<span style="color:var(--red)">${di.containers_stopped}</span>`],
+      ['Images', di.images],
+    ];
+    fields.forEach(([k,v]) => {
+      html += `<div class="info-item"><span class="info-key">${k}</span><span class="info-val">${v}</span></div>`;
+    });
+    html += `</div>`;
+
+    // Container stats summary cards
+    html += `<div class="grid-4" style="margin-top:12px">`;
+    html += `<div class="card"><div class="card-label">TOTAL</div><div class="card-value">${di.containers_total}</div><div class="card-sub">containers</div></div>`;
+    html += `<div class="card"><div class="card-label">RUNNING</div><div class="card-value" style="color:var(--green)">${di.containers_running}</div><div class="card-sub">active now</div></div>`;
+    html += `<div class="card"><div class="card-label">STOPPED</div><div class="card-value" style="color:var(--red)">${di.containers_stopped}</div><div class="card-sub">exited</div></div>`;
+    html += `<div class="card"><div class="card-label">IMAGES</div><div class="card-value" style="color:var(--accent2)">${di.images}</div><div class="card-sub">stored locally</div></div>`;
+    html += `</div>`;
+  }
+
+  // CONTAINERS TABLE
+  html += `<div class="section-label">CONTAINERS</div>`;
+  if (d.containers.length === 0) {
+    html += `<div class="card" style="text-align:center;padding:30px;color:var(--muted)">No containers found</div>`;
+  } else {
+    html += `<div class="table-wrap"><table>
+      <thead><tr>
+        <th>ID</th><th>NAME</th><th>IMAGE</th><th>STATUS</th>
+        <th>CPU</th><th>MEMORY</th><th>NET RX/TX</th><th>RESTARTS</th><th>CREATED</th>
+      </tr></thead><tbody>`;
+    d.containers.forEach(c => {
+      html += `<tr>
+        <td style="color:var(--muted);font-size:11px">${c.id}</td>
+        <td style="color:var(--accent2)">${c.name}</td>
+        <td style="color:var(--muted);max-width:180px;overflow:hidden;text-overflow:ellipsis">${c.image}</td>
+        <td>${statusTag(c.status)}</td>
+        <td>${c.status === 'running' ? miniBar(c.cpu_percent) : '<span class="muted-val">—</span>'}</td>
+        <td>${c.status === 'running' ? `${miniBar(c.mem_percent)}<span style="font-size:10px;color:var(--muted);display:block">${c.mem_usage}</span>` : '<span class="muted-val">—</span>'}</td>
+        <td style="font-size:11px;color:var(--muted)">${c.net_rx !== '—' ? `↓${c.net_rx} ↑${c.net_tx}` : '—'}</td>
+        <td style="text-align:center;color:${c.restart_count > 0 ? 'var(--warn)' : 'var(--muted)'}">${c.restart_count}</td>
+        <td style="font-size:11px;color:var(--muted)">${c.created}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+
+  // DISK
+  html += `<div class="section-label">DISK USAGE</div>`;
+  html += `<div class="disk-cards">`;
+  d.disks.forEach(disk => {
+    const fillCls = disk.percent >= 90 ? 'danger' : disk.percent >= 70 ? 'warn' : '';
+    html += `<div class="disk-card">
+      <div class="disk-path">${disk.mountpoint}</div>
+      <div class="disk-device">${disk.device} · ${disk.fstype}</div>
+      <div class="progress-label" style="display:flex;justify-content:space-between;font-size:10px;color:var(--muted);margin-bottom:4px">
+        <span>${disk.used} used</span><span>${disk.percent}%</span>
+      </div>
+      <div class="progress-track"><div class="progress-fill ${fillCls}" style="width:${disk.percent}%"></div></div>
+      <div class="disk-stats">
+        <span>Free: ${disk.free}</span>
+        <span>Total: ${disk.total}</span>
+      </div>
+    </div>`;
+  });
+  html += `</div>`;
+
+  // NETWORK
+  html += `<div class="section-label">NETWORK INTERFACES</div>`;
+  html += `<div class="grid-3">`;
+  d.networks.forEach(net => {
+    html += `<div class="net-card">
+      <div class="net-name">${net.name}</div>
+      ${net.addresses.length > 0 ? `<div style="font-size:10px;color:var(--muted);margin-bottom:8px">${net.addresses.join(' · ')}</div>` : ''}
+      <div class="net-stat"><span>Bytes Recv</span><span>${net.bytes_recv}</span></div>
+      <div class="net-stat"><span>Bytes Sent</span><span>${net.bytes_sent}</span></div>
+      <div class="net-stat"><span>Packets In</span><span>${net.packets_recv.toLocaleString()}</span></div>
+      <div class="net-stat"><span>Packets Out</span><span>${net.packets_sent.toLocaleString()}</span></div>
+      <div class="net-stat"><span>Errors In/Out</span><span style="color:${net.errin+net.errout>0?'var(--red)':'var(--muted)'}">${net.errin} / ${net.errout}</span></div>
+      <div class="net-stat"><span>Drops In/Out</span><span style="color:${net.dropin+net.dropout>0?'var(--warn)':'var(--muted)'}">${net.dropin} / ${net.dropout}</span></div>
+    </div>`;
+  });
+  html += `</div>`;
+
+  // VOLUMES
+  if (d.volumes && d.volumes.length > 0) {
+    html += `<div class="section-label">DOCKER VOLUMES</div>`;
+    html += `<div class="table-wrap"><table>
+      <thead><tr>
+        <th>NAME</th>
+        <th>DRIVER</th>
+        <th>USED BY</th>
+        <th>DISK USAGE</th>
+        <th>USED</th>
+        <th>FREE</th>
+        <th>TOTAL</th>
+        <th>MOUNTPOINT</th>
+        <th>CREATED</th>
+      </tr></thead><tbody>`;
+    d.volumes.forEach(vol => {
+      const hasUsage = vol.percent !== null;
+      const fillCls = vol.percent >= 90 ? 'danger' : vol.percent >= 70 ? 'warn' : '';
+      const usageCell = hasUsage
+        ? `<div class="mini-bar">
+            <div class="mini-bar-track"><div class="mini-bar-fill ${fillCls}" style="width:${Math.min(vol.percent,100)}%"></div></div>
+            <span>${vol.percent}%</span>
+           </div>`
+        : `<span class="muted-val">—</span>`;
+
+      const usedBy = vol.used_by.length > 0
+        ? vol.used_by.map(n => `<span style="color:var(--accent2);font-size:11px">${n}</span>`).join('<br>')
+        : `<span class="muted-val">—</span>`;
+
+      // Shorten long volume names (hashed names)
+      const shortName = vol.name.length > 24
+        ? `<span title="${vol.name}" style="color:var(--accent)">${vol.name.slice(0,12)}…${vol.name.slice(-6)}</span>`
+        : `<span style="color:var(--accent)">${vol.name}</span>`;
+
+      html += `<tr>
+        <td>${shortName}</td>
+        <td style="color:var(--muted)">${vol.driver}</td>
+        <td>${usedBy}</td>
+        <td>${usageCell}</td>
+        <td style="color:var(--accent)">${vol.used}</td>
+        <td style="color:var(--muted)">${vol.free}</td>
+        <td style="color:var(--muted)">${vol.total}</td>
+        <td style="font-size:10px;color:var(--muted);max-width:180px;overflow:hidden;text-overflow:ellipsis" title="${vol.mountpoint}">${vol.mountpoint || '—'}</td>
+        <td style="font-size:11px;color:var(--muted)">${vol.created}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+
+  // IMAGES
+  if (d.images.length > 0) {
+    html += `<div class="section-label">DOCKER IMAGES</div>`;
+    html += `<div class="table-wrap"><table>
+      <thead><tr><th>ID</th><th>TAGS</th><th>SIZE</th><th>CREATED</th></tr></thead><tbody>`;
+    d.images.forEach(img => {
+      html += `<tr>
+        <td style="color:var(--muted);font-size:11px">${img.id}</td>
+        <td>${img.tags.map(t => `<span style="color:var(--accent2);font-size:11px">${t}</span>`).join('<br>')}</td>
+        <td style="color:var(--accent)">${img.size}</td>
+        <td style="color:var(--muted);font-size:11px">${img.created}</td>
+      </tr>`;
+    });
+    html += `</tbody></table></div>`;
+  }
+
+  html += `<div style="height:40px"></div>`;
+  document.getElementById('app').innerHTML = html;
+}
+
+fetchStats();
+</script>
+</body>
+</html>
