@@ -4,6 +4,12 @@ This hands-on exercise uses a Python application that monitors the Docker host. 
 
 ---
 
+## Preview
+
+![alt text](./images/output.png)
+
+---
+
 ## Prerequisites
 
 - 1. Download application code
